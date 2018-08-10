@@ -1,0 +1,179 @@
+<!doctype HTML>
+<html lang='en'>
+
+<head>
+	<meta charset='utf-8'>
+
+	<meta http-equiv='Content-type' content='text/html' charset='UTF-8'>
+	<meta name='viewport' content='width=device-width, initial-scale=1'>
+
+	<title>Bar chart with tooltip</title>
+	<meta name='description' content=''>
+	<meta name='author' content=''>
+
+	<!-- D3 js -->
+	<!-- <script src='https://d3js.org/d3.v4.min.js'></script> -->
+	<script src='js/d3.v4.min.js'></script>
+
+	<!-- D3 Tooltip -->
+	<!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/d3-tip/0.7.1/d3-tip.min.js"></script> -->
+	<script src="js/d3-tip.min.js"></script>
+
+	<style>
+		html,
+		body {
+			margin: 0 auto;
+			width: 100%;
+			font-family: helvetica, arial, sans-serif;
+		}
+
+		#container {
+			margin: 50px;
+		}
+
+		.tool-tip {
+			padding: 10px;
+			background: #fff;
+			border: 1px solid #444;
+		}
+
+	</style>
+</head>
+
+<body>
+	<div id='container'></div>
+</body>
+
+	<script>
+		const margin = {top: 20, right: 20, bottom: 30, left: 40},
+	    width = 960 - margin.left - margin.right,
+	    height = 500 - margin.top - margin.bottom;
+
+	    const colors = d3.scaleOrdinal().range(['#fadb6b', '#6baefa', 'red']);
+
+		// Ranges
+		const x0 = d3.scaleBand()
+		        .rangeRound([0, width])
+		        .paddingInner(0.1);
+		const x1 = d3.scaleBand()
+		        .padding(0);
+		const y = d3.scaleLinear()
+		        .rangeRound([height, 0]);
+
+		// Canvas
+		const svg = d3.select('#container').append('svg')
+		    .attr('width', width + margin.left + margin.right)
+		    .attr('height', height + margin.top + margin.bottom)
+		  	.append('g')
+		    .attr('transform',
+		          'translate(' + margin.left + ',' + margin.top + ')');
+
+		const legSqr = 20;
+		const legSpace = 10;
+
+		const legendGroup = svg.append('g')
+			.attr('width', 150)
+			.attr('height', 200)
+			.attr('transform', 'translate(800, 10)');
+
+		// Get the data
+		d3.csv('data/sales2.csv', (d, i, columns) => {
+		  	for (let i = 1, n = columns.length; i < n; ++i) d[columns[i]] = +d[columns[i]];
+			return d;
+		}, (error, data) => {
+	  		if (error) throw error;
+
+		  	// Slice data columns starting with first.
+		  	// .slice(0,3) means it will end on the 4th column, the last in this case
+		  	// .slice(0,3) isn't needed if all columns are needed. Then use only .slice(1)
+			const keys = data.columns.slice(1).slice(0,3);
+
+			// Scale the range of the data in the domains
+			x0.domain(data.map((d) => { return d.salesperson; }));
+			x1.domain(keys).rangeRound([0, x0.bandwidth()]);
+			y.domain([0, d3.max(data, (d) => { return d3.max(keys, (key) => { return d[key]; }); })]);
+
+			// Tooltip
+			const toolTip = d3.tip()
+				.attr('class', 'tool-tip')
+				.offset([10, 0])
+				.html((d) => {
+					return ' Earned ' + d.value + 'k in sales';
+				})
+
+			// Var charts
+			const group = svg.append('g')
+		  		.selectAll('g')
+		        .data(data)
+		    	.enter()
+		    	.append('g')
+		    	.attr('transform', (d) => { return 'translate(' + x0(d.salesperson) + ',0)'; })
+
+			group.selectAll('rect')
+		        .data((d) => {
+		        	return keys.map((key) => { return {key: key, value: d[key]}; });
+		        })
+		    	.enter()
+		    	.append('rect')
+		    	.attr('class', 'bar')
+		    	.attr('x', (d) => { return x1(d.key); })
+		    	.attr('y', (d) => { return y(d.value); })
+		    	.attr('width', x1.bandwidth())
+		    	.attr('height', (d) => { return height - y(d.value); })
+		    	.style("fill", (d,i) => { return colors(d.key); })
+		    	.on('mouseover', toolTip.show)
+		    	.on('mouseout', toolTip.hide);
+
+		    group.call(toolTip);
+
+		   	// Value numbers over bars
+			const textVal = group.selectAll('text')
+				.data((d) => {
+		        	return keys.map((key) => { return {key: key, value: d[key]}; }); });
+
+			textVal.enter()
+				.append('text')
+				.text((d) => { return d.value; })
+				.attr('transform', (d,i) => {
+					let x0 = x1.bandwidth() * i + 10;
+			    	let y0 = y(d.value) + 15;
+			    	return 'translate(' + x0 + ',' + y0 + ')' })
+				.style('text-anchor','middle')
+				.attr('fill','#fff');
+
+			// X Axis
+			svg.append('g')
+			    .attr('transform', 'translate(0,' + height + ')')
+			    .call(d3.axisBottom(x0));
+
+			// Y Axis
+			svg.append('g')
+			    .call(d3.axisLeft(y));
+
+			// Legend
+			const legend = legendGroup.selectAll('.legend')
+				.data(colors.domain())
+				.enter()
+				.append('g')
+				.attr('transform', (d,i) => {
+					const legHeight = legSqr - legSpace;
+					const offset = legHeight * colors.domain().length / 2;
+					const horz = legSqr;
+					const vert = i * (legHeight + 20);
+					return 'translate(' + horz + ',' + vert + ')';
+				});
+
+			legend.append('rect')
+				.attr('width', legSqr)
+				.attr('height', legSqr)
+				.attr('fill', colors);
+
+			legend.append('text')
+				.attr('x', legSqr + (legSpace + 2))
+				.attr('y', legSqr - 5)
+				.text((d) => { return d; });
+		});
+
+	</script>
+
+</html>
